@@ -11,35 +11,55 @@ declare(strict_types=1);
  */
 namespace Hyperf\Watcher;
 
+use Hyperf\Contract\ConfigInterface;
 use Hyperf\Watcher\Driver\ScanFileDriver;
 
 class Option
 {
-    protected string $driver = ScanFileDriver::class;
+    /**
+     * @var string
+     */
+    protected $driver = ScanFileDriver::class;
 
-    protected string $bin = 'php';
+    /**
+     * @var string
+     */
+    protected $bin = 'php';
 
-    protected string $command = 'vendor/hyperf/watcher/watcher.php start';
+    /**
+     * @var string
+     */
+    protected $command = 'vendor/hyperfnew/watcher/watcher.php start';
 
     /**
      * @var string[]
      */
-    protected array $watchDir = ['app', 'config'];
+    protected $watchDir = ['app', 'config'];
 
     /**
      * @var string[]
      */
-    protected array $watchFile = ['.env'];
+    protected $watchFile = ['.env'];
 
     /**
      * @var string[]
      */
-    protected array $ext = ['.php', '.env'];
+    protected $ext = ['.php', '.env'];
 
-    protected int $scanInterval = 2000;
+    /**
+     * @var int
+     */
+    protected $scanInterval = 2000;
 
-    public function __construct(array $options = [], array $dir = [], array $file = [], protected bool $restart = true)
+    /**
+     * @var bool
+     */
+    protected $restart = true;
+
+    public function __construct(ConfigInterface $config, array $dir, array $file, bool $restart = true)
     {
+        $options = $config->get('watcher', []);
+
         isset($options['driver']) && $this->driver = $options['driver'];
         isset($options['bin']) && $this->bin = $options['bin'];
         isset($options['command']) && $this->command = $options['command'];
@@ -50,6 +70,7 @@ class Option
 
         $this->watchDir = array_unique(array_merge($this->watchDir, $dir));
         $this->watchFile = array_unique(array_merge($this->watchFile, $file));
+        $this->restart = $restart;
     }
 
     public function getDriver(): string
@@ -85,11 +106,6 @@ class Option
     public function getScanInterval(): int
     {
         return $this->scanInterval > 0 ? $this->scanInterval : 2000;
-    }
-
-    public function getScanIntervalSeconds(): float
-    {
-        return $this->getScanInterval() / 1000;
     }
 
     public function isRestart(): bool

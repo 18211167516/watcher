@@ -16,8 +16,14 @@ use PhpParser\NodeVisitorAbstract;
 
 class RewriteClassNameVisitor extends NodeVisitorAbstract
 {
-    public function __construct(protected Metadata $metadata)
+    /**
+     * @var Metadata
+     */
+    protected $metadata;
+
+    public function __construct(Metadata $metadata)
     {
+        $this->metadata = $metadata;
     }
 
     public function leaveNode(Node $node)

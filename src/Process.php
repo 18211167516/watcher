@@ -13,13 +13,11 @@ namespace Hyperf\Watcher;
 
 use Hyperf\Di\Annotation\AnnotationInterface;
 use Hyperf\Di\Annotation\AnnotationReader;
-use Hyperf\Di\Annotation\AspectCollector;
 use Hyperf\Di\Annotation\ScanConfig;
 use Hyperf\Di\Aop\Ast;
 use Hyperf\Di\Aop\ProxyManager;
 use Hyperf\Di\MetadataCollector;
 use Hyperf\Di\ReflectionManager;
-use Hyperf\Utils\Composer;
 use Hyperf\Utils\Filesystem\Filesystem;
 use Hyperf\Watcher\Ast\Metadata;
 use Hyperf\Watcher\Ast\RewriteClassNameVisitor;
@@ -28,21 +26,42 @@ use ReflectionClass;
 
 class Process
 {
-    protected AnnotationReader $reader;
+    /**
+     * @var string
+     */
+    protected $file;
 
-    protected ScanConfig $config;
+    /**
+     * @var AnnotationReader
+     */
+    protected $reader;
 
-    protected Filesystem $filesystem;
+    /**
+     * @var ScanConfig
+     */
+    protected $config;
 
-    protected Ast $ast;
+    /**
+     * @var Filesystem
+     */
+    protected $filesystem;
 
-    protected string $path = BASE_PATH . '/runtime/container/scan.cache';
+    /**
+     * @var Ast
+     */
+    protected $ast;
 
-    public function __construct(protected string $file)
+    /**
+     * @var string
+     */
+    protected $path = BASE_PATH . '/runtime/container/scan.cache';
+
+    public function __construct(string $file)
     {
+        $this->file = $file;
         $this->ast = new Ast();
         $this->config = $this->initScanConfig();
-        $this->reader = new AnnotationReader($this->config->getIgnoreAnnotations());
+        $this->reader = new AnnotationReader();
         $this->filesystem = new Filesystem();
     }
 
@@ -54,7 +73,7 @@ class Process
         }
         $class = $meta->toClassName();
         $collectors = $this->config->getCollectors();
-        [$data, $proxies, $aspectClasses] = file_exists($this->path) ? unserialize(file_get_contents($this->path)) : [[], [], []];
+        [$data, $proxies] = unserialize(file_get_contents($this->path));
         foreach ($data as $collector => $deserialized) {
             /** @var MetadataCollector $collector */
             if (in_array($collector, $collectors)) {
@@ -80,16 +99,10 @@ class Process
             $data[$collector] = $collector::serialize();
         }
 
-        $composerLoader = Composer::getLoader();
-        $composerLoader->addClassMap($this->config->getClassMap());
-        $this->deleteAspectClasses($aspectClasses, $proxies, $class);
-
         // Reload the proxy class.
-        $manager = new ProxyManager(array_merge($composerLoader->getClassMap(), $proxies, [$class => $this->file]), BASE_PATH . '/runtime/container/proxy/');
+        $manager = new ProxyManager(array_merge($proxies, [$class => $this->file]), BASE_PATH . '/runtime/container/proxy/');
         $proxies = $manager->getProxies();
-        $aspectClasses = $manager->getAspectClasses();
-
-        $this->putCache($this->path, serialize([$data, $proxies, $aspectClasses]));
+        $this->putCache($this->path, serialize([$data, $proxies]));
     }
 
     public function collect($className, ReflectionClass $reflection)
@@ -154,32 +167,13 @@ class Process
 
     protected function initScanConfig(): ScanConfig
     {
-        return ScanConfig::instance(BASE_PATH . '/config/');
-    }
-
-    protected function deleteAspectClasses($aspectClasses, $proxies, $class): void
-    {
-        foreach ($aspectClasses as $aspect => $classes) {
-            if ($aspect !== $class) {
-                continue;
-            }
-            foreach ($classes as $path) {
-                if (file_exists($path)) {
-                    unlink($path);
-                }
-            }
+        $config = ScanConfig::instance(BASE_PATH . '/config/');
+        foreach ($config->getIgnoreAnnotations() as $annotation) {
+            AnnotationReader::addGlobalIgnoredName($annotation);
         }
-
-        $classesAspects = AspectCollector::get('classes', []);
-        foreach ($classesAspects as $aspect => $rules) {
-            if ($aspect !== $class) {
-                continue;
-            }
-            foreach ($rules as $rule) {
-                if (isset($proxies[$rule]) && file_exists($proxies[$rule])) {
-                    unlink($proxies[$rule]);
-                }
-            }
+        foreach ($config->getGlobalImports() as $alias => $annotation) {
+            AnnotationReader::addGlobalImports($alias, $annotation);
         }
+        return $config;
     }
 }

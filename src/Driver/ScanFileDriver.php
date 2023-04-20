@@ -12,26 +12,41 @@ declare(strict_types=1);
 namespace Hyperf\Watcher\Driver;
 
 use Hyperf\Contract\StdoutLoggerInterface;
-use Hyperf\Engine\Channel;
-use Hyperf\Stringable\Str;
 use Hyperf\Utils\Filesystem\Filesystem;
+use Hyperf\Utils\Str;
 use Hyperf\Watcher\Option;
+use Swoole\Coroutine\Channel;
+use Swoole\Timer;
 use Symfony\Component\Finder\SplFileInfo;
 
-class ScanFileDriver extends AbstractDriver
+class ScanFileDriver implements DriverInterface
 {
-    protected Filesystem $filesystem;
+    /**
+     * @var Option
+     */
+    protected $option;
 
-    public function __construct(protected Option $option, private StdoutLoggerInterface $logger)
+    /**
+     * @var Filesystem
+     */
+    protected $filesystem;
+
+    /**
+     * @var StdoutLoggerInterface
+     */
+    private $logger;
+
+    public function __construct(Option $option, StdoutLoggerInterface $logger)
     {
-        parent::__construct($option);
+        $this->option = $option;
         $this->filesystem = new Filesystem();
+        $this->logger = $logger;
     }
 
     public function watch(Channel $channel): void
     {
-        $seconds = $this->option->getScanIntervalSeconds();
-        $this->timerId = $this->timer->tick($seconds, function () use ($channel) {
+        $ms = $this->option->getScanInterval();
+        Timer::tick($ms, function () use ($channel) {
             global $lastMD5;
             $files = [];
             $currentMD5 = $this->getWatchMD5($files);
@@ -44,7 +59,7 @@ class ScanFileDriver extends AbstractDriver
                 $deleteFiles = array_diff(array_keys($lastMD5), array_keys($currentMD5));
                 $deleteCount = count($deleteFiles);
 
-                $watchingLog = sprintf('%s Watching: Total:%d, Change:%d, Add:%d, Delete:%d.', self::class, count($currentMD5), count($changeFilesMD5), count($addFiles), $deleteCount);
+                $watchingLog = sprintf('%s Watching: Total:%d, Change:%d, Add:%d, Delete:%d.', __CLASS__, count($currentMD5), count($changeFilesMD5), count($addFiles), $deleteCount);
                 $this->logger->debug($watchingLog);
 
                 if ($deleteCount == 0) {
@@ -55,8 +70,10 @@ class ScanFileDriver extends AbstractDriver
                 } else {
                     $this->logger->warning('Delete files must be restarted manually to take effect.');
                 }
+                $lastMD5 = $currentMD5;
+            } else {
+                $lastMD5 = $currentMD5;
             }
-            $lastMD5 = $currentMD5;
         });
     }
 

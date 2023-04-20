@@ -23,12 +23,19 @@ class ConfigProvider
             'commands' => [
                 WatchCommand::class,
             ],
+            'annotations' => [
+                'scan' => [
+                    'paths' => [
+                        __DIR__,
+                    ],
+                ],
+            ],
             'publish' => [
                 [
                     'id' => 'config',
                     'description' => 'The config for watcher.',
                     'source' => __DIR__ . '/../publish/watcher.php',
-                    'destination' => BASE_PATH . '/.watcher.php',
+                    'destination' => BASE_PATH . '/config/autoload/watcher.php',
                 ],
             ],
         ];
